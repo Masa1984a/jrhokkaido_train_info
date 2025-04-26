@@ -1,0 +1,5 @@
+mcp
+requests
+pyquery
+aiohttp
+beautifulsoup4
