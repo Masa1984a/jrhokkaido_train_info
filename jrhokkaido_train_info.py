@@ -2,13 +2,16 @@
 JR 北海道運行情報 MCP サーバー
 """
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Image
+from mcp.server.fastmcp.prompts import base
 import logging
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 import aiohttp
 import asyncio
 from bs4 import BeautifulSoup
+import os
+import pathlib
 
 # ────────────────── ロガー設定（stderr 出力） ──────────────────
 logging.basicConfig(
@@ -155,11 +158,45 @@ async def get_delays(area: Optional[str] = None) -> Dict:
     
     return {"content": [{"type": "text", "text": text}]}
 
+# ────────────────── MCP プロンプト ──────────────────
+@mcp.prompt()
+def check_all_areas() -> str:
+    """全エリアの運行状況を確認するプロンプト"""
+    return """JR北海道の全エリア（札幌近郊、道央、道南、道北、道東、北海道新幹線）の運行状況を確認して、遅延や運休があれば詳細を教えてください。情報がない場合はその旨を伝えてください。"""
+
+@mcp.prompt()
+def check_specific_area(area: str) -> str:
+    """特定エリアの運行状況を確認するプロンプト
+    
+    Args:
+        area: 確認したいエリア名 (例: "札幌", "道央", "道南", "道北", "道東", "北海道新幹線")
+    """
+    return f"""JR北海道の{area}エリアの運行状況を確認して、遅延や運休があれば詳細を教えてください。情報がない場合はその旨を伝えてください。"""
+
+@mcp.prompt()
+def delay_impact_analysis() -> list[base.Message]:
+    """JR北海道の遅延状況を分析するプロンプト"""
+    return [
+        base.UserMessage("""JR北海道の全路線の遅延情報を取得して、以下の点について分析してください：
+
+1. 現在どのエリアで最も多くの遅延が発生していますか？
+2. どのような種類の遅延（運休・遅延・その他）が多いですか？
+3. 札幌駅を起点として移動する場合、現時点で最も影響の少ないルートはどこですか？
+
+できるだけ詳細な情報で分析をお願いします。"""),
+        base.AssistantMessage("JR北海道の運行状況を分析します。お待ちください..."),
+    ]
+
 # ────────────────── エントリーポイント ──────────────────
 def start_server():
     """MCPサーバーを開始する関数"""
     try:
         log.info("利用可能ツール: %s", [get_delays.__name__])
+        log.info("利用可能プロンプト: %s", [
+            check_all_areas.__name__, 
+            check_specific_area.__name__, 
+            delay_impact_analysis.__name__
+        ])
         log.info("クライアントからの接続を待機中…")
         mcp.run(transport="stdio")
     except Exception:
